@@ -1,0 +1,157 @@
+----- YesMan's All Generic Traders Sell Weapon Parts
+----- Dependent upon Weapon Parts Overhaul
+----- specifically its script "wpo_loot.script"
+---- all of this script is ripped from wpo, just with my own, commented additions
+---
+local function dbg_print(msg,...)
+    if not ym_debug then return end
+
+    ym_debug.set_modname("Traders Sell Parts")
+    ym_debug.dbg_print(msg,...)
+end
+
+local function dbg_dump(o)
+    if not ym_debug then return end
+
+    return ym_debug.dbg_dump(o)
+end
+
+-- temp condition for trade
+local parts_list = {}
+local has_parts 			= arti_jamming.has_parts
+
+
+TraderAuto = trader_autoinject.update
+function trader_autoinject.update(npc)
+    TraderAuto(npc)
+    yes_man_add_parts_to_all(npc) -- you define this function ok
+end
+
+local BASE_AMT = 15
+-- TODO: edit function to only inject weapon parts
+function yes_man_add_parts_to_all(npc)
+    -- TODO: remove debug
+    -- exec_console_cmd("clear_log") --debug
+    printf("running yesmans add parts function")
+    --- now run it again, but for barkeep, to add parts to regular traders like barkeep
+    local item_table = {} -- holds condition range for item spawning
+
+
+    -- tprint(tradertype)
+    if tradertype ~= trader_autoinject.BARMAN and  tradertype ~= trader_autoinject.SUPPLIER and tradertype ~= -1 then
+        return
+    end
+    -- purge any existing parts
+    function itr(temp, item)
+        if item and string.find(item:section(), "prt_w") then
+            local se_itm = alife_object(item:id())
+            if se_item then 
+                alife_release_id(item:id())
+            end
+        end
+    end
+    npc:iterate_inventory(itr)
+    -- generate an amount of parts based on trader type
+    local table = {}
+    local supply_level = trader_autoinject.supply_level(npc, true) or 1
+    -- print_dbg("npc %s has supply level %s", npc:name(), supply_level)
+    
+    -- trading with flea market and etc
+    if tradertype == trader_autoinject.SUPPLIER then
+        BASE_AMT = 25 -- flea market has TONS of junk
+    -- trading with regular stalkers
+    elseif tradertype == -1 then 
+        BASE_AMT =  5 -- reguler stalkers don't carry much
+        item_table["cond_r"] = {35, 65}
+    else
+        item_table["cond_r"] = {60, 65} -- condition range for parts 
+    end
+
+    for i=1,supply_level * BASE_AMT do
+        local part = parts_list[math.random(#parts_list)]
+
+        -- ignore outfit parts, only get weapon parts
+        while not part:find("_w") do
+            part = parts_list[math.random(#parts_list)]	
+        end
+        -- flea market specific
+        -- only give them some low tier stuff
+        if tradertype == trader_autoinject.SUPPLIER then
+            -- single digit numbers
+            if string.match(part, '_[5-9]$') then
+                -- printf("the part is %s", part)
+                -- printf("The part is %s and its rank is %s", part, part:sub(part:len() , part:len()))
+                part, _ = string.gsub(part, '_[5-9]$', '_1')
+            -- double digit numbers
+            elseif string.match(part, '_1[0-8]$') then
+                -- tprint("Found an illegal part")
+                -- printf("The part is %s and its rank is %s", part, part:sub(part:len() - 1, part:len() - 0))
+                part, _ = string.gsub(part, '_1[0-8]$', '_1')
+            end
+        end
+        
+        -- print_dbg("Adding %s to trader %s", part, npc:name())
+        if table[part] then
+            table[part] = table[part] + 1
+        else
+            table[part] = 1
+        end
+        -- printf("THE FINAL PART IS %s", part)
+    end
+    if supply_level > 1 then
+        table["partskit_tool"] = 1
+    end
+
+    -- add the parts
+    yes_man_spawn_items_with_condition(npc, table, true, item_table) -- custom spawn function so we can control item condition
+end
+
+function on_game_start()
+    local prices = ini_file("items\\settings\\part_prices.ltx")
+    local part_section = utils_data.collect_section(prices, "wpo_part_prices")
+    local n = prices:line_count("wpo_part_prices") or 0
+
+    for i=0, n-1 do
+        local result, sec, value = prices:r_line("wpo_part_prices" , i , "", "")
+        -- print_dbg("parts_list[%s] = %s", i + 1, sec)    
+        parts_list[i + 1] = sec
+    end
+end
+
+-----------------
+local furniture = {
+    ["esc_m_trader"] = true,
+    ["red_m_lesnik"] = true
+}
+
+--custom inject function, to inject to most traders
+-- most is ripped from autoinject
+function yes_man_spawn_items_with_condition(npc, to_spawn, check_existing, item_table)
+
+    local npc_name = npc:name()
+    local alive_or_furniture = xr_conditions.is_alive(db.actor, npc) or furniture[npc_name]
+    if not alive_or_furniture then return end
+    local supply_table = {}
+    copy_table(supply_table, to_spawn)
+    if check_existing then
+        local function itr_inv(temp, item)
+            if supply_table[item:section()] and supply_table[item:section()] > 0 then
+                -- printf("Found 1 of %s", item:section())
+                supply_table[item:section()] = supply_table[item:section()] - 1
+            end
+        end
+        npc:iterate_inventory(itr_inv)
+    end
+    
+    for k,v in pairs(supply_table) do
+        -- printf("Creating %s of %s", v, k)
+        for i=1, v do
+            -- printf("Created %s", k)
+            -- using the optional cond arg for alife_create_item, to add random condition to the items
+            alife_create_item(k, npc, item_table)
+        end
+    end
+end
+
+
+AddScriptCallback("trader_on_restock")
