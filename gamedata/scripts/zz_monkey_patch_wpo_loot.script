@@ -1,0 +1,13 @@
+--[[
+Overwrite wpo_loot function to prevent it from adding parts to traders
+--]]
+
+
+if wpo_loot then
+   wpo_loot.add_parts = function (...) return true end 
+end
+
+if a_wpo_parts then
+   printf("a_wpo_parts get_item_cost overwritten")
+   a_wpo_parts.get_item_cost = function (...) return true end
+end
