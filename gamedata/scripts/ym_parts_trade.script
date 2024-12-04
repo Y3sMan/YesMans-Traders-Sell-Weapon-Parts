@@ -1,6 +1,10 @@
 --#region Debug
 
+local DEBUG = true
+
+
 local function dbg_print(msg,...)
+    if not DEBUG then return end
     if not ym_debug then return end
 
     ym_debug.set_modname("PARTS TRADER INJECT")
@@ -8,10 +12,14 @@ local function dbg_print(msg,...)
 end
 
 local function dbg_dump(o)
+    if not DEBUG then return end
     if not ym_debug then return end
     return ym_debug.dbg_dump(o)
 end
 
+--#endregion
+
+--#region Utils
 local function weighted_random  (pool)
    local poolsize = 0
    for k,v in pairs(pool) do
@@ -26,7 +34,6 @@ local function weighted_random  (pool)
       end
    end
 end
-
 --#endregion
 
 
@@ -39,6 +46,15 @@ local RANDOM_O_PARTS = true
 local SPAWN_W_PARTS = true
 local SPAWN_O_PARTS = true
 local BASE_AMT = 5
+
+local tradertypes = { 
+
+["0"] = "COMPANION",   
+["1"] = "MECHANIC",    
+["2"] = "BARMAN",      
+["3"] = "MEDIC",       
+["4"] = "SUPPLIER"
+ }
 
 --#region
 -- local parts_list = { -- Tiers Based on Prices Highest to Lowest
@@ -374,10 +390,15 @@ local default_weights = {
     { 1,  { 81, 100 } }
 }
 
+local high_end = {
+    {95, {80, 90} },
+    {5, {91, 100} }
+}
+
 
 local trader_cond_weights_ranges = {
     ["BARMAN"] = default_weights,
-    ["MECHANIC"] = default_weights,
+    ["MECHANIC"] = high_end,
     ["SUPPLIER"] = default_weights
 }
 --#endregion
@@ -526,8 +547,12 @@ end
 
 
 local function change_part_cond(npc)
-    local tradertype = trader_autoinject.get_trader_type(npc)
-    local weights_conds = trader_cond_weights_ranges[tradertype] or trader_cond_weights_ranges["SUPPLIER"]
+    local tradertype_int = tostring( trader_autoinject.get_trader_type(npc) )
+    local tradertype_str = tradertypes[tradertype_int] or "SUPPLIER"
+
+    local weights_conds = trader_cond_weights_ranges[tradertype_str]
+    printf("tradertype = %s", tradertype_str)
+    printf("weights_conds = %s", dbg_dump(weights_conds))
 
     -- Mod is not active, essentially
     if not RANDOM_O_PARTS and not RANDOM_W_PARTS then return end
